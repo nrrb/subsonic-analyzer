@@ -589,7 +589,7 @@ const SubsonicAnalyzer = () => {
                         onClick={() => togglePlayback(result.fileName)}
                         aria-label={currentlyPlaying === result.fileName ? 'Pause' : 'Play'}
                       >
-                        {currentlyPlaying === result.fileName ? '⏸️' : '▶️'}
+                        {currentlyPlaying === result.fileName ? '⏹️' : '▶️'}
                       </button>
                     </td>
                     <td>{result.fileName}</td>
