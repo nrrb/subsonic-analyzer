@@ -15,6 +15,8 @@ const SubsonicAnalyzer = () => {
   // Add a state for tracking current playback time
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Add a state for the playback shelf visibility
+  const [showPlaybackShelf, setShowPlaybackShelf] = useState(false);
   const fileInputRef = useRef(null);
   const uploadAreaRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -22,6 +24,8 @@ const SubsonicAnalyzer = () => {
   const audioSourcesRef = useRef({});
   // Add a ref for the playback progress update interval
   const progressIntervalRef = useRef(null);
+  // Add ref for the hide shelf timeout
+  const hideShelfTimeoutRef = useRef(null);
 
   useEffect(() => {
     // Initialize Audio Context on component mount
@@ -38,6 +42,14 @@ const SubsonicAnalyzer = () => {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
+      
+      // Auto-hide the playback shelf after a short delay when playback ends
+      if (hideShelfTimeoutRef.current) {
+        clearTimeout(hideShelfTimeoutRef.current);
+      }
+      hideShelfTimeoutRef.current = setTimeout(() => {
+        setShowPlaybackShelf(false);
+      }, 1500);
     });
 
     // Add timeupdate event listener for tracking playback progress
@@ -85,9 +97,26 @@ const SubsonicAnalyzer = () => {
         clearInterval(progressIntervalRef.current);
       }
       
+      // Clear any pending hide shelf timeout
+      if (hideShelfTimeoutRef.current) {
+        clearTimeout(hideShelfTimeoutRef.current);
+      }
+      
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showSettings]);
+
+  // Show playback shelf when a track is playing
+  useEffect(() => {
+    if (currentlyPlaying) {
+      setShowPlaybackShelf(true);
+      // Clear any pending hide timeout
+      if (hideShelfTimeoutRef.current) {
+        clearTimeout(hideShelfTimeoutRef.current);
+        hideShelfTimeoutRef.current = null;
+      }
+    }
+  }, [currentlyPlaying]);
 
   // Function to update playback progress
   const updatePlaybackProgress = () => {
@@ -98,8 +127,8 @@ const SubsonicAnalyzer = () => {
   };
 
   // Function to seek to a position in the audio
-  const seekTo = (e, fileName) => {
-    if (currentlyPlaying === fileName && audioElementRef.current) {
+  const seekTo = (e) => {
+    if (currentlyPlaying && audioElementRef.current) {
       // Get the clicked position relative to the progress bar width
       const progressBar = e.currentTarget;
       const rect = progressBar.getBoundingClientRect();
@@ -133,6 +162,14 @@ const SubsonicAnalyzer = () => {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
+      
+      // Auto-hide the playback shelf after a short delay
+      if (hideShelfTimeoutRef.current) {
+        clearTimeout(hideShelfTimeoutRef.current);
+      }
+      hideShelfTimeoutRef.current = setTimeout(() => {
+        setShowPlaybackShelf(false);
+      }, 1500);
     } else {
       // If another song is playing, pause it first
       if (currentlyPlaying) {
@@ -183,6 +220,8 @@ const SubsonicAnalyzer = () => {
       
       audioElementRef.current.play();
       setCurrentlyPlaying(fileName);
+      // Show playback shelf when starting playback
+      setShowPlaybackShelf(true);
     }
   };
 
@@ -548,6 +587,17 @@ const SubsonicAnalyzer = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Get filename of currently playing track
+  const getCurrentlyPlayingFilename = () => {
+    if (!currentlyPlaying) return "";
+    // Find the result that matches the current playing filename
+    const result = results.find(r => r.fileName === currentlyPlaying);
+    if (result) {
+      return result.fileName;
+    }
+    return currentlyPlaying;
+  };
+
   return (
     <div className="subsonic-analyzer">
       <h1>Subsonic Energy Analyzer</h1>
@@ -637,23 +687,15 @@ const SubsonicAnalyzer = () => {
                         'Complete'}
                     </span>
                     
-                    {/* Add playback scrub bar when file is playing */}
-                    {isPlaying && (
-                      <div className="playback-container">
-                        <div className="playback-time">{formatCurrentTime()}</div>
-                        <div 
-                          className="playback-scrub-bar"
-                          onClick={(e) => seekTo(e, file.name)}
-                        >
-                          <div 
-                            className="playback-progress" 
-                            style={{ width: `${playbackProgress}%` }}
-                          ></div>
-                        </div>
-                        <div className="playback-duration">
-                          {formatDuration(audioElementRef.current?.duration || 0)}
-                        </div>
-                      </div>
+                    {/* Play button for files */}
+                    {progress === 100 && (
+                      <button 
+                        className="play-button" 
+                        onClick={() => togglePlayback(file.name)}
+                        aria-label={isPlaying ? 'Pause' : 'Play'}
+                      >
+                        {isPlaying ? '⏹️' : '▶️'}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -692,25 +734,7 @@ const SubsonicAnalyzer = () => {
                         </button>
                       </td>
                       <td className="filename-cell">
-                        <div>{result.fileName}</div>
-                        {/* Add playback scrub bar when track in results is playing */}
-                        {isPlaying && (
-                          <div className="playback-container">
-                            <div className="playback-time">{formatCurrentTime()}</div>
-                            <div 
-                              className="playback-scrub-bar"
-                              onClick={(e) => seekTo(e, result.fileName)}
-                            >
-                              <div 
-                                className="playback-progress" 
-                                style={{ width: `${playbackProgress}%` }}
-                              ></div>
-                            </div>
-                            <div className="playback-duration">
-                              {formatDuration(audioElementRef.current?.duration || 0)}
-                            </div>
-                          </div>
-                        )}
+                        {result.fileName}
                       </td>
                       <td>{result.energy.toFixed(2)}</td>
                       <td>{formatDuration(result.duration)}</td>
@@ -725,6 +749,44 @@ const SubsonicAnalyzer = () => {
             </button>
           </div>
         )}
+      </div>
+      
+      {/* Playback shelf that slides out from the bottom */}
+      <div className={`playback-shelf ${showPlaybackShelf ? 'show' : 'hide'}`}>
+        <div className="playback-shelf-content">
+          <div className="playback-shelf-info">
+            <div className="currently-playing-title">
+              {getCurrentlyPlayingFilename()}
+            </div>
+            <div className="playback-shelf-times">
+              <div className="playback-time">{formatCurrentTime()}</div>
+              <div className="playback-duration">{formatDuration(audioElementRef.current?.duration || 0)}</div>
+            </div>
+          </div>
+          
+          <div 
+            className="playback-scrub-bar"
+            onClick={seekTo}
+          >
+            <div 
+              className="playback-progress" 
+              style={{ width: `${playbackProgress}%` }}
+            ></div>
+          </div>
+          
+          <button 
+            className="playback-shelf-close" 
+            onClick={() => {
+              if (currentlyPlaying) {
+                togglePlayback(currentlyPlaying);
+              } else {
+                setShowPlaybackShelf(false);
+              }
+            }}
+          >
+            {currentlyPlaying ? '⏹️' : '×'}
+          </button>
+        </div>
       </div>
     </div>
   );
