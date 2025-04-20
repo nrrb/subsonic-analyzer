@@ -144,7 +144,7 @@ td, th {
 }
 
 .filename-cell {
-  max-width: 300px;
+  max-width: 25vw;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -171,6 +171,7 @@ td, th {
 /* File list styles */
 .file-list {
   margin-bottom: 20px;
+  max-width: 100vw;
 }
 
 .file-item {
@@ -179,6 +180,7 @@ td, th {
   margin-bottom: 10px;
   border-radius: 4px;
   overflow: hidden;
+  max-width: 100vw;
 }
 
 .file-content {
@@ -193,9 +195,10 @@ td, th {
 .filename {
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: wrap;
   white-space: nowrap;
   margin-right: 10px;
+  max-width: 65vw;
 }
 
 .status {

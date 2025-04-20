@@ -13,7 +13,7 @@ const FileListItem = ({ file, fileId, progress, isPlaying, togglePlayback }) => 
         <span className="status">
           {progress < 100 ? 
             (progress === -1 ? 'Error' : `${progress}%`) : 
-            'Complete'}
+            ''}
         </span>
         
         {/* Play button for completed files */}
