@@ -285,3 +285,96 @@ tr:hover {
 tr.playing:hover {
   background-color: rgba(66, 153, 225, 0.15);
 }
+
+/* Playback progress bar styling */
+.playback-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+  gap: 8px;
+}
+
+.playback-time, .playback-duration {
+  font-size: 12px;
+  color: #555;
+  min-width: 40px;
+  text-align: center;
+}
+
+.playback-scrub-bar {
+  flex-grow: 1;
+  height: 6px;
+  background-color: #ddd;
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.playback-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background-color: #4287f5;
+  border-radius: 3px;
+  transition: width 0.1s ease;
+}
+
+/* Apply specific styles for file items when a song is playing */
+.file-item.is-playing {
+  background-color: rgba(66, 135, 245, 0.05);
+  border-left: 3px solid #4287f5;
+  padding-left: 7px; /* Compensate for the border */
+}
+
+/* Adjust the file content layout to accommodate the playback bar */
+.file-item .file-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Adjust table cells to accommodate playback bar */
+.filename-cell {
+  min-width: 200px;
+}
+
+/* Enhance the playing state in the results table */
+.results table tr.playing {
+  background-color: rgba(66, 135, 245, 0.05);
+}
+
+.results table tr.playing td {
+  border-left: 3px solid #4287f5;
+  padding-left: 7px;
+}
+
+/* Make the playback scrub bar more interactive */
+.playback-scrub-bar:hover {
+  height: 8px;
+}
+
+.playback-scrub-bar:hover .playback-progress {
+  background-color: #3a75d8;
+}
+
+/* Add a playback dot indicator */
+.playback-progress::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background-color: #4287f5;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+  display: none;
+}
+
+.playback-scrub-bar:hover .playback-progress::after {
+  display: block;
+}

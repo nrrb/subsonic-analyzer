@@ -12,11 +12,16 @@ const SubsonicAnalyzer = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [freqRange, setFreqRange] = useState({ lower: 20, upper: 150 });
   const [currentlyPlaying, setCurrentlyPlaying] = useState(null);
+  // Add a state for tracking current playback time
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   const fileInputRef = useRef(null);
   const uploadAreaRef = useRef(null);
   const audioContextRef = useRef(null);
   const audioElementRef = useRef(null);
   const audioSourcesRef = useRef({});
+  // Add a ref for the playback progress update interval
+  const progressIntervalRef = useRef(null);
 
   useEffect(() => {
     // Initialize Audio Context on component mount
@@ -24,9 +29,23 @@ const SubsonicAnalyzer = () => {
     audioContextRef.current = new AudioContext();
     audioElementRef.current = new Audio();
 
-    // Handle audio element ended event
+    // Handle audio element events
     audioElementRef.current.addEventListener('ended', () => {
       setCurrentlyPlaying(null);
+      setPlaybackProgress(0);
+      // Clear the progress update interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    });
+
+    // Add timeupdate event listener for tracking playback progress
+    audioElementRef.current.addEventListener('timeupdate', updatePlaybackProgress);
+    
+    // Add loadedmetadata event listener to get duration
+    audioElementRef.current.addEventListener('loadedmetadata', () => {
+      setDuration(audioElementRef.current.duration);
     });
 
     // Close settings menu when clicking outside
@@ -57,11 +76,43 @@ const SubsonicAnalyzer = () => {
       if (audioElementRef.current) {
         audioElementRef.current.pause();
         audioElementRef.current.removeEventListener('ended', () => {});
+        audioElementRef.current.removeEventListener('timeupdate', updatePlaybackProgress);
+        audioElementRef.current.removeEventListener('loadedmetadata', () => {});
+      }
+      
+      // Clear the progress update interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
       }
       
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showSettings]);
+
+  // Function to update playback progress
+  const updatePlaybackProgress = () => {
+    if (audioElementRef.current && !audioElementRef.current.paused) {
+      const progress = (audioElementRef.current.currentTime / audioElementRef.current.duration) * 100;
+      setPlaybackProgress(progress);
+    }
+  };
+
+  // Function to seek to a position in the audio
+  const seekTo = (e, fileName) => {
+    if (currentlyPlaying === fileName && audioElementRef.current) {
+      // Get the clicked position relative to the progress bar width
+      const progressBar = e.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickPosition = (e.clientX - rect.left) / rect.width;
+      
+      // Calculate the new time and set it
+      const newTime = clickPosition * audioElementRef.current.duration;
+      audioElementRef.current.currentTime = newTime;
+      
+      // Update the progress state immediately for smoother UI
+      setPlaybackProgress(clickPosition * 100);
+    }
+  };
 
   // Watch for new files and start analysis automatically
   useEffect(() => {
@@ -76,11 +127,26 @@ const SubsonicAnalyzer = () => {
       // Pause the currently playing audio
       audioElementRef.current.pause();
       setCurrentlyPlaying(null);
+      
+      // Clear the progress update interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
     } else {
       // If another song is playing, pause it first
       if (currentlyPlaying) {
         audioElementRef.current.pause();
+        
+        // Clear the existing progress update interval
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
       }
+      
+      // Reset playback progress for the new track
+      setPlaybackProgress(0);
       
       // Check if we have the audio data in our cache
       if (audioSourcesRef.current[fileName]) {
@@ -473,6 +539,15 @@ const SubsonicAnalyzer = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Format current time as MM:SS
+  const formatCurrentTime = () => {
+    if (!audioElementRef.current) return "0:00";
+    const currentTime = audioElementRef.current.currentTime;
+    const mins = Math.floor(currentTime / 60);
+    const secs = Math.floor(currentTime % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="subsonic-analyzer">
       <h1>Subsonic Energy Analyzer</h1>
@@ -545,13 +620,15 @@ const SubsonicAnalyzer = () => {
             {files.map((file, index) => {
               const fileId = getFileId(file);
               const progress = fileProgress[fileId] || 0;
+              const isPlaying = currentlyPlaying === file.name;
               
               return (
-                <div className="file-item" key={fileId}>
+                <div className={`file-item ${isPlaying ? 'is-playing' : ''}`} key={fileId}>
                   <div 
                     className={`progress-bar ${progress === -1 ? 'progress-error' : ''}`}
                     style={{ width: `${progress === -1 ? 100 : progress}%` }}
                   ></div>
+                  
                   <div className="file-content">
                     <span className="filename">{file.name}</span>
                     <span className="status">
@@ -559,6 +636,25 @@ const SubsonicAnalyzer = () => {
                         (progress === -1 ? 'Error' : `${progress}%`) : 
                         'Complete'}
                     </span>
+                    
+                    {/* Add playback scrub bar when file is playing */}
+                    {isPlaying && (
+                      <div className="playback-container">
+                        <div className="playback-time">{formatCurrentTime()}</div>
+                        <div 
+                          className="playback-scrub-bar"
+                          onClick={(e) => seekTo(e, file.name)}
+                        >
+                          <div 
+                            className="playback-progress" 
+                            style={{ width: `${playbackProgress}%` }}
+                          ></div>
+                        </div>
+                        <div className="playback-duration">
+                          {formatDuration(audioElementRef.current?.duration || 0)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -581,22 +677,46 @@ const SubsonicAnalyzer = () => {
                 </tr>
               </thead>
               <tbody>
-                {results.map((result, index) => (
-                  <tr key={index} className={currentlyPlaying === result.fileName ? 'playing' : ''}>
-                    <td className="play-cell">
-                      <button 
-                        className="play-button" 
-                        onClick={() => togglePlayback(result.fileName)}
-                        aria-label={currentlyPlaying === result.fileName ? 'Pause' : 'Play'}
-                      >
-                        {currentlyPlaying === result.fileName ? '⏹️' : '▶️'}
-                      </button>
-                    </td>
-                    <td>{result.fileName}</td>
-                    <td>{result.energy.toFixed(2)}</td>
-                    <td>{formatDuration(result.duration)}</td>
-                  </tr>
-                ))}
+                {results.map((result, index) => {
+                  const isPlaying = currentlyPlaying === result.fileName;
+                  
+                  return (
+                    <tr key={index} className={isPlaying ? 'playing' : ''}>
+                      <td className="play-cell">
+                        <button 
+                          className="play-button" 
+                          onClick={() => togglePlayback(result.fileName)}
+                          aria-label={isPlaying ? 'Pause' : 'Play'}
+                        >
+                          {isPlaying ? '⏹️' : '▶️'}
+                        </button>
+                      </td>
+                      <td className="filename-cell">
+                        <div>{result.fileName}</div>
+                        {/* Add playback scrub bar when track in results is playing */}
+                        {isPlaying && (
+                          <div className="playback-container">
+                            <div className="playback-time">{formatCurrentTime()}</div>
+                            <div 
+                              className="playback-scrub-bar"
+                              onClick={(e) => seekTo(e, result.fileName)}
+                            >
+                              <div 
+                                className="playback-progress" 
+                                style={{ width: `${playbackProgress}%` }}
+                              ></div>
+                            </div>
+                            <div className="playback-duration">
+                              {formatDuration(audioElementRef.current?.duration || 0)}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                      <td>{result.energy.toFixed(2)}</td>
+                      <td>{formatDuration(result.duration)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             
